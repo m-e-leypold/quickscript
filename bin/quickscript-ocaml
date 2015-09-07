@@ -1,0 +1,75 @@
+#!/bin/sh
+
+# quickscript - a quick and dirty solution to run compiled languages as scripts
+# Copyright (C) 2015 -- M E Leypold
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# 
+
+QUICKSCRIPT_ENVROOT="$HOME/.quickscript/ocaml"
+set -u
+set -e
+
+SCRIPT="$1"
+ENVNAME="$(awk<"$SCRIPT" '(NR==2){gsub(/.*env: */,""); print $1; exit 0}')"
+# TODO: optionally set default env
+ENVDIR="$QUICKSCRIPT_ENVROOT/$ENVNAME"
+BASENAME="$(basename $1 .ml)"
+HASH="$(stat "$1" -c "S%D%i%Y")"
+CACHE="$ENVDIR/$HASH"
+
+SRC="$CACHE/$BASENAME".ml
+BIN="$CACHE/$BASENAME"
+TMPSRC="${CACHE}_$BASENAME".ml
+TMPBIN="${HASH}_$BASENAME".byte
+CLEANALL="${QUICKSCRIPT_CLEANALL:-false}"
+DEBUG="${QUICKSCRIPT_DEBUG:-false}"
+LOG="$CACHE"/"$BASENAME".log
+
+if "$DEBUG"; then
+    set -x
+fi
+
+
+if test -f "$ENVDIR/Buildenv"; then
+    . "$ENVDIR/Buildenv"
+fi
+
+if "$CLEANALL"; then
+    ( cd $ENVDIR
+      echo -n "$PWD: "
+      make clean
+    )
+fi
+
+if ! test -f "$BIN"; then
+    mkdir -p "$CACHE";
+
+    ( set -e
+      set -u
+      set -o pipefail
+      { echo '# 2"'"$1"'"' &&  tail -n +2 <"$1"; }  >"$TMPSRC" \
+	  && cd "$ENVDIR"		\
+	  && make "$TMPBIN"		\
+	  && mv "$TMPBIN" "$BIN"	\
+	  && mv "$TMPSRC" "$SRC"
+
+    ) >"$CACHE"/"$BASENAME".log 2>&1  \
+	|| { cat "$LOG" >&2; exit 1; }
+fi
+
+SCRIPT="$1"
+shift
+exec -a "$SCRIPT" "$BIN" "$@"
+

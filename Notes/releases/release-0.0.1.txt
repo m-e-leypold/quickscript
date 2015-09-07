@@ -1,0 +1,5 @@
+* Release 0.0.1 of quickscript
+
+  - First prototype
+  - Currently only support for ocaml, no operations to manage
+    environments.
